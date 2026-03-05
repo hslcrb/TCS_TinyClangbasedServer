@@ -1,9 +1,11 @@
 #define _CRT_SECURE_NO_WARNINGS
+#include <io.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -67,65 +69,86 @@ void handle_client(SOCKET client_socket) {
       *query = '\0';
 
     if (strcmp(method, "GET") == 0) {
-      char actual_path[1024] = "build/web";
-      if (strcmp(path, "/") == 0) {
-        strcat(actual_path, "/index.html");
-      } else {
-        strcat(actual_path, path);
-      }
-
-      // Convert to backslashes if needed (WinAPI fopen handles both, but let's
-      // be safe)
-      for (int i = 0; actual_path[i]; i++)
-        if (actual_path[i] == '/')
-          actual_path[i] = '\\';
-
-      FILE *f = fopen(actual_path, "rb");
-      // If file not found, try serving index.html (for SPA routing)
-      if (!f && !strchr(path, '.')) {
-        strcpy(actual_path, "build\\web\\index.html");
-        f = fopen(actual_path, "rb");
-      }
-
-      if (f) {
-        _fseeki64(f, 0, SEEK_END);
-        long long fsize = _ftelli64(f);
-        _fseeki64(f, 0, SEEK_SET);
-
-        char header[1024];
-        sprintf(header,
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: %s\r\n"
-                "Content-Length: %lld\r\n"
-                "Cache-Control: public, max-age=3600\r\n"
-                "X-Content-Type-Options: nosniff\r\n"
-                "Connection: close\r\n\r\n",
-                get_mime_type(actual_path), fsize);
-        send(client_socket, header, (int)strlen(header), 0);
-
-        char *buffer = malloc((size_t)fsize);
-        if (buffer) {
-          fread(buffer, 1, (size_t)fsize, f);
-          if (send_all(client_socket, buffer, fsize) == -1) {
-            printf("Send failed for: %s\n", actual_path);
-          }
-          free(buffer);
-          printf("200 OK: %s (%lld bytes)\n", actual_path, fsize);
-          if (strstr(actual_path, "index.html")) {
-            printf(">> The application may take a few moments to load. Please "
-                   "wait... / 애플리케이션 로딩에 시간이 걸릴 수 있습니다. "
-                   "잠시만 기다려 주세요...\n");
-          }
+      if (strcmp(method, "GET") == 0) {
+        // Basic directory traversal protection
+        if (strstr(path, "..")) {
+          const char *forbidden = "HTTP/1.1 403 Forbidden\r\n"
+                                  "Content-Type: text/plain\r\n"
+                                  "Content-Length: 9\r\n"
+                                  "Connection: close\r\n\r\n"
+                                  "Forbidden";
+          send(client_socket, forbidden, (int)strlen(forbidden), 0);
+          printf("403 Forbidden: %s (Traversal attempt)\n", path);
+          closesocket(client_socket);
+          return;
         }
-        fclose(f);
-      } else {
-        const char *not_found = "HTTP/1.1 404 Not Found\r\n"
-                                "Content-Type: text/plain\r\n"
-                                "Content-Length: 9\r\n"
-                                "Connection: close\r\n\r\n"
-                                "Not Found";
-        send(client_socket, not_found, (int)strlen(not_found), 0);
-        printf("404 Not Found: %s\n", actual_path);
+
+        char actual_path[1024];
+        // Try serving from "www" folder first, fallback to root
+        if (_access("www", 0) == 0) {
+          strcpy(actual_path, "www");
+        } else {
+          strcpy(actual_path, ".");
+        }
+
+        if (strcmp(path, "/") == 0) {
+          strcat(actual_path, "/index.html");
+        } else {
+          strcat(actual_path, path);
+        }
+
+        // Convert to backslashes for Windows
+        for (int i = 0; actual_path[i]; i++)
+          if (actual_path[i] == '/')
+            actual_path[i] = '\\';
+
+        FILE *f = fopen(actual_path, "rb");
+
+        // If file not found, check if it's a SPA-style route (no dot in path)
+        if (!f && !strchr(path, '.')) {
+          if (strstr(actual_path, "www\\")) {
+            strcpy(actual_path, "www\\index.html");
+          } else {
+            strcpy(actual_path, ".\\index.html");
+          }
+          f = fopen(actual_path, "rb");
+        }
+
+        if (f) {
+          _fseeki64(f, 0, SEEK_END);
+          long long fsize = _ftelli64(f);
+          _fseeki64(f, 0, SEEK_SET);
+
+          char header[1024];
+          sprintf(header,
+                  "HTTP/1.1 200 OK\r\n"
+                  "Content-Type: %s\r\n"
+                  "Content-Length: %lld\r\n"
+                  "Cache-Control: public, max-age=3600\r\n"
+                  "X-Content-Type-Options: nosniff\r\n"
+                  "Connection: close\r\n\r\n",
+                  get_mime_type(actual_path), fsize);
+          send(client_socket, header, (int)strlen(header), 0);
+
+          char *buffer = malloc((size_t)fsize);
+          if (buffer) {
+            fread(buffer, 1, (size_t)fsize, f);
+            if (send_all(client_socket, buffer, fsize) == -1) {
+              printf("Send failed for: %s\n", actual_path);
+            }
+            free(buffer);
+            printf("200 OK: %s (%lld bytes)\n", actual_path, fsize);
+          }
+          fclose(f);
+        } else {
+          const char *not_found = "HTTP/1.1 404 Not Found\r\n"
+                                  "Content-Type: text/plain\r\n"
+                                  "Content-Length: 9\r\n"
+                                  "Connection: close\r\n\r\n"
+                                  "Not Found";
+          send(client_socket, not_found, (int)strlen(not_found), 0);
+          printf("404 Not Found: %s\n", actual_path);
+        }
       }
     }
   }
