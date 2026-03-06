@@ -10,6 +10,10 @@
 
 - **Lightweight**: Minimal dependencies, using native Winsock.
 - **가벼움**: 최소한의 의존성으로 네이티브 Winsock을 사용합니다.
+- **Multi-Protocol**: Supports HTTP/1.1 and HTTPS (via native SChannel).
+- **다중 프로토콜**: HTTP/1.1 및 HTTPS(네이티브 SChannel 사용)를 지원합니다.
+- **HTTP/3 Ready**: Initial foundation for HTTP/3 (QUIC) over UDP.
+- **HTTP/3 준비**: UDP를 통한 HTTP/3(QUIC)의 초기 기반이 마련되었습니다.
 - **SPA Friendly**: Automatically serves `index.html` for unknown paths without extensions.
 - **SPA 최적화**: 확장자가 없는 알 수 없는 경로에 대해 자동으로 `index.html`을 제공합니다.
 - **MIME Support**: Extensive support for modern web formats (WASM, SVG, Fonts, etc.).
@@ -27,12 +31,12 @@
 
 #### Using Clang:
 ```bash
-clang -o tcs.exe src/main.c -lws2_32
+clang -I./src -o tcs.exe src/main.c -lws2_32 -lsecur32
 ```
 
 #### Using GCC:
 ```bash
-gcc -o tcs.exe src/main.c -lws2_32
+gcc -I./src -o tcs.exe src/main.c -lws2_32 -lsecur32
 ```
 
 ### Usage / 사용법

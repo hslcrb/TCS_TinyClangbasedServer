@@ -1,5 +1,5 @@
 # Contributing to TCS_TinyClangbasedServer
-
+모든 헤더파일 샅샅이 찾아내서 다 통합하라.
 We welcome contributions! As a project focused on simplicity and performance, we ask that you follow these guidelines:
 
 ## How to Contribute
